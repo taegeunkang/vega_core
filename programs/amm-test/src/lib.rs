@@ -2,7 +2,7 @@ use anchor_lang::solana_program::entrypoint::ProgramResult;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token;
 use anchor_spl::token::{Mint, Token, TokenAccount, Transfer};
-declare_id!("5iJ1KCrWEQpR4FDMJrQWMdLFv3HdBF45kpzabkghmBPx");
+declare_id!("DZcR8ZEPnuHzAB7cE4TUKz5eyUTyTk4qDv5ETic5QQwR");
 
 mod math;
 mod states;
@@ -30,7 +30,19 @@ pub mod amm_test {
         ctx.accounts.pool.vault = ctx.accounts.pool_vault.key();
         ctx.accounts.pool.lp_mint = ctx.accounts.lp_mint.key();
         ctx.accounts.pool.lp_supply = 0;
-        ctx.accounts.pool.amount = 0;
+        ctx.accounts.pool.vault_amount = 0;
+
+        let seeds = &[
+            b"pool",
+            ctx.accounts.config.to_account_info().key.as_ref(),
+            ctx.accounts.mint.to_account_info().key.as_ref(),
+        ];
+        let (found_pool_pda, found_pool_bump) = Pubkey::find_program_address(seeds, ctx.program_id);
+        if found_pool_pda != ctx.accounts.pool.key() {
+            return ProgramResult::Err(ProgramError::InvalidSeeds);
+        }
+        ctx.accounts.pool.bump = found_pool_bump;
+
 
         let decimal: u64 = 1000000000;
         let lp_amount: u64 = 100000000 * decimal;
@@ -43,44 +55,40 @@ pub mod amm_test {
         token::transfer(ctx.accounts.into_transfer_cpi_context_mint(), _amount_in)?;
 
         let amount_fee = fee_amount(_amount_in, ctx.accounts.pool.fee_rate);
-
         let _amount = _amount_in.checked_sub(amount_fee).unwrap();
-        msg!("fee amount : {}", amount_fee);
-        msg!("amount {}", _amount);
-
-        ctx.accounts.pool.amount = ctx.accounts.pool.amount.checked_add(_amount).unwrap();
+        ctx.accounts.pool.vault_amount = ctx.accounts.pool.vault_amount.checked_add(_amount).unwrap();
 
         let lp_amount: u64 = ctx.accounts.calc_lp_amount(_amount);
+
         if lp_amount == 0 {
             return ProgramResult::Err(ProgramError::InsufficientFunds);
         }
 
-        msg!("lp amount : {}", lp_amount);
-
         ctx.accounts.user_pool_info.authority = ctx.accounts.signer.key();
         ctx.accounts.user_pool_info.pool = ctx.accounts.pool.key();
         ctx.accounts.user_pool_info.mint = ctx.accounts.mint.key();
-        ctx.accounts.user_pool_info.amount = _amount;
+        ctx.accounts.user_pool_info.deposited_amount = _amount;
         ctx.accounts.user_pool_info.deposited_time = ctx.accounts.clock.unix_timestamp as u64;
         ctx.accounts.user_pool_info.lp_amount = lp_amount;
 
         let seeds = &[
-            b"pool",
+            b"pool".as_ref(),
             ctx.accounts.config.to_account_info().key.as_ref(),
             ctx.accounts.mint.to_account_info().key.as_ref(),
+            &[ctx.accounts.pool.bump]
         ];
         let signer = &[&seeds[..]];
 
-        // let cpi_context = CpiContext::new_with_signer(
-        //     ctx.accounts.token_program.to_account_info(),
-        //     Transfer {
-        //         from: ctx.accounts.pool_lp_vault.to_account_info(),
-        //         to: ctx.accounts.user_lp_ata.clone(),
-        //         authority: ctx.accounts.pool.to_account_info(),
-        //     },
-        //     signer,
-        // );
-        // token::transfer(cpi_context, lp_amount)?;
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.pool_lp_vault.to_account_info(),
+                to: ctx.accounts.user_lp_ata.clone(),
+                authority: ctx.accounts.pool.to_account_info(),
+            },
+            signer,
+        );
+        token::transfer(cpi_context, lp_amount)?;
 
         ProgramResult::Ok(())
     }
@@ -108,8 +116,9 @@ pub struct CreateStakingPool<'info> {
     /// CHECK : this is safe
     #[account(mut)]
     pub mint: AccountInfo<'info>,
+    /// CHECK : this is safe
     #[account(mut)]
-    pub lp_mint: Account<'info, Mint>,
+    pub lp_mint: AccountInfo<'info>,
     #[account(init,seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, payer = signer, token::mint = mint, token::authority = pool)]
     pub pool_vault: Box<Account<'info, TokenAccount>>,
     #[account(init, seeds=[pool.key().as_ref(), lp_mint.key().as_ref()], bump, payer = signer, token::mint = lp_mint, token::authority = pool)]
@@ -135,9 +144,9 @@ pub struct AddLiquidity<'info> {
     pub signer: Signer<'info>,
     #[account(mut, seeds = [b"pool", config.key().as_ref(), mint.key().as_ref()], bump)]
     pub pool: Box<Account<'info, Pool>>,
-    #[account(mut, seeds=[pool.key().as_ref(), mint.key().as_ref()], bump)]
+    #[account(mut, seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, constraint = pool_vault.owner == pool.key())]
     pub pool_vault: Box<Account<'info, TokenAccount>>,
-    #[account(mut, seeds=[pool.key().as_ref(), lp_mint.key().as_ref()], bump)]
+    #[account(mut, seeds=[pool.key().as_ref(), lp_mint.key().as_ref()], bump, constraint = pool_lp_vault.owner == pool.key())]
     pub pool_lp_vault: Box<Account<'info, TokenAccount>>,
     /// CHECK : this is safe
     #[account(mut)]
@@ -190,7 +199,7 @@ impl<'info> AddLiquidity<'info> {
     }
 
     pub fn calc_lp_amount(&self, amount_in: u64) -> u64 {
-        let pool_amount: u64 = self.pool.amount;
+        let pool_amount: u64 = self.pool.vault_amount;
 
         let total_supply: u64 = self.pool.lp_supply;
         let mut liquidity: u64 = 0;
