@@ -11,14 +11,14 @@ import {
 } from "@solana/spl-token";
 import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { expect } from "chai";
-import { AmmTest } from "../target/types/amm_test";
+import { VegaCore } from "../target/types/vega_core";
 
 describe("amm-test", () => {
   // Configure the client to use the local cluster.
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.AmmTest as Program<AmmTest>;
+  const program = anchor.workspace.VegaCore as Program<VegaCore>;
 
   const owner: Keypair = anchor.web3.Keypair.generate();
   let mint: PublicKey;
@@ -240,6 +240,7 @@ describe("amm-test", () => {
         "confirmed",
         TOKEN_PROGRAM_ID
       );
+
       expect(before_lp.amount).not.to.equal(after_lp.amount);
     } catch (error) {
       console.log(error);

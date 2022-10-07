@@ -1,12 +1,12 @@
 [package]
-name = "amm-test"
+name = "vega_core"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "vega protocol core"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "amm_test"
+name = "vega_core"
 
 [features]
 no-entrypoint = []

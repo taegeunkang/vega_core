@@ -2,7 +2,7 @@
 seeds = false
 skip-lint = false
 [programs.localnet]
-amm_test = "DZcR8ZEPnuHzAB7cE4TUKz5eyUTyTk4qDv5ETic5QQwR"
+vega_core = "6jMXqfgZoguXohoWktL9UBhAqADYJSZYMC47ENoY2DvW"
 
 [registry]
 url = "https://api.apr.dev"

@@ -1,16 +1,17 @@
 use anchor_lang::solana_program::entrypoint::ProgramResult;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token;
-use anchor_spl::token::{Mint, Token, TokenAccount, Transfer};
-declare_id!("DZcR8ZEPnuHzAB7cE4TUKz5eyUTyTk4qDv5ETic5QQwR");
+use anchor_spl::token::{ Token, TokenAccount, Transfer};
+declare_id!("6jMXqfgZoguXohoWktL9UBhAqADYJSZYMC47ENoY2DvW");
 
-mod math;
+mod utils;
 mod states;
-use math::*;
+use utils::*;
 use states::*;
 
+
 #[program]
-pub mod amm_test {
+pub mod vega_core {
 
     use super::*;
 
@@ -32,16 +33,8 @@ pub mod amm_test {
         ctx.accounts.pool.lp_supply = 0;
         ctx.accounts.pool.vault_amount = 0;
 
-        let seeds = &[
-            b"pool",
-            ctx.accounts.config.to_account_info().key.as_ref(),
-            ctx.accounts.mint.to_account_info().key.as_ref(),
-        ];
-        let (found_pool_pda, found_pool_bump) = Pubkey::find_program_address(seeds, ctx.program_id);
-        if found_pool_pda != ctx.accounts.pool.key() {
-            return ProgramResult::Err(ProgramError::InvalidSeeds);
-        }
-        ctx.accounts.pool.bump = found_pool_bump;
+        let _bump = find_pool_bump(ctx.accounts.config.key(), ctx.accounts.mint.key(), ctx.program_id.clone());
+        ctx.accounts.pool.bump = _bump;
 
 
         let decimal: u64 = 1000000000;
@@ -58,7 +51,7 @@ pub mod amm_test {
         let _amount = _amount_in.checked_sub(amount_fee).unwrap();
         ctx.accounts.pool.vault_amount = ctx.accounts.pool.vault_amount.checked_add(_amount).unwrap();
 
-        let lp_amount: u64 = ctx.accounts.calc_lp_amount(_amount);
+        let lp_amount: u64 = calc_lp_amount(ctx.accounts.pool.vault_amount,ctx.accounts.pool.lp_supply,_amount);
 
         if lp_amount == 0 {
             return ProgramResult::Err(ProgramError::InsufficientFunds);
@@ -198,23 +191,4 @@ impl<'info> AddLiquidity<'info> {
         )
     }
 
-    pub fn calc_lp_amount(&self, amount_in: u64) -> u64 {
-        let pool_amount: u64 = self.pool.vault_amount;
-
-        let total_supply: u64 = self.pool.lp_supply;
-        let mut liquidity: u64 = 0;
-
-        if total_supply == 0 {
-            liquidity = sqrt(amount_in).checked_sub(1000).unwrap();
-            //1000개 기본 락
-        } else {
-            liquidity = amount_in
-                .checked_mul(total_supply)
-                .unwrap()
-                .checked_div(pool_amount)
-                .unwrap();
-        }
-
-        liquidity
-    }
 }
