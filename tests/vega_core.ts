@@ -13,7 +13,7 @@ import { BN, min } from "bn.js";
 import { expect } from "chai";
 import { VegaCore } from "../target/types/vega_core";
 
-describe("amm-test", () => {
+describe("vega_core", () => {
   // Configure the client to use the local cluster.
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -29,7 +29,7 @@ describe("amm-test", () => {
   let pool_pda: PublicKey;
   let pool_vault_ata: PublicKey;
   let pool_lp_vault_ata: PublicKey;
-  before(async () => {});
+  before(async () => { });
 
   const request_sol = async (user: PublicKey) => {
     // request 10 sol
@@ -202,9 +202,8 @@ describe("amm-test", () => {
       );
 
       const tx = await program.methods
-        .addLiquidity(new anchor.BN(100 * LAMPORTS_PER_SOL))
+        .deposit(new anchor.BN(100 * LAMPORTS_PER_SOL))
         .accounts({
-          authority: owner.publicKey,
           signer: owner.publicKey,
           pool: pool_pda,
           poolVault: pool_vault_ata,
@@ -236,34 +235,34 @@ describe("amm-test", () => {
     }
   });
 
-  it("other user add liquidity compare lp", async () => {
-    let other_01 = Keypair.generate();
+  it("another user deposit and compare lp", async () => {
+    let another_01 = Keypair.generate();
 
-    let [other_01_pool_info_pda, _4] = findProgramAddressSync(
+    let [another_01_pool_info_pda, _4] = findProgramAddressSync(
       [
         Buffer.from(anchor.utils.bytes.utf8.encode("user_pool_info")),
-        other_01.publicKey.toBuffer(),
+        another_01.publicKey.toBuffer(),
         pool_pda.toBuffer(),
       ],
       program.programId
     );
 
     // create other account 01
-    await request_sol(other_01.publicKey);
-    let other_01_mint_ata: PublicKey = await createAssociatedTokenAccount(
+    await request_sol(another_01.publicKey);
+    let another_01_mint_ata: PublicKey = await createAssociatedTokenAccount(
       provider.connection,
-      other_01,
+      another_01,
       mint,
-      other_01.publicKey,
+      another_01.publicKey,
       { commitment: "confirmed" },
       TOKEN_PROGRAM_ID
     );
 
-    let other_01_lp_mint_ata: PublicKey = await createAssociatedTokenAccount(
+    let another_01_lp_mint_ata: PublicKey = await createAssociatedTokenAccount(
       provider.connection,
-      other_01,
+      another_01,
       lp_mint,
-      other_01.publicKey,
+      another_01.publicKey,
       { commitment: "confirmed" },
       TOKEN_PROGRAM_ID
     );
@@ -272,7 +271,7 @@ describe("amm-test", () => {
       provider.connection,
       owner,
       mint,
-      other_01_mint_ata,
+      another_01_mint_ata,
       owner,
       101 * LAMPORTS_PER_SOL,
       undefined,
@@ -281,31 +280,30 @@ describe("amm-test", () => {
     );
 
     const tx = await program.methods
-      .addLiquidity(new BN(100 * LAMPORTS_PER_SOL))
+      .deposit(new BN(100 * LAMPORTS_PER_SOL))
       .accounts({
-        authority: owner.publicKey,
-        signer: other_01.publicKey,
+        signer: another_01.publicKey,
         pool: pool_pda,
         poolVault: pool_vault_ata,
         poolLpVault: pool_lp_vault_ata,
         mint: mint,
         lpMint: lp_mint,
-        userAta: other_01_mint_ata,
-        userLpAta: other_01_lp_mint_ata,
-        userPoolInfo: other_01_pool_info_pda,
+        userAta: another_01_mint_ata,
+        userLpAta: another_01_lp_mint_ata,
+        userPoolInfo: another_01_pool_info_pda,
         config: config_pda,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([other_01])
+      .signers([another_01])
       .rpc();
 
     await provider.connection.confirmTransaction(tx, "confirmed");
 
-    const other_01_lp_mint_account = await getAccount(
+    const another_01_lp_mint_account = await getAccount(
       provider.connection,
-      other_01_lp_mint_ata,
+      another_01_lp_mint_ata,
       "confirmed",
       TOKEN_PROGRAM_ID
     );
@@ -316,8 +314,26 @@ describe("amm-test", () => {
       TOKEN_PROGRAM_ID
     );
 
-    expect(other_01_lp_mint_account.amount.toString()).to.equal(
+    expect(another_01_lp_mint_account.amount.toString()).to.equal(
       owner_lp_mint_account.amount.toString()
     );
+  });
+
+  it("withdraw", async () => {
+
+    let [owner_pool_info_pda, _4] = findProgramAddressSync(
+      [
+        Buffer.from(anchor.utils.bytes.utf8.encode("user_pool_info")),
+        owner.publicKey.toBuffer(),
+        pool_pda.toBuffer(),
+      ],
+      program.programId
+    );
+
+
+    const tx = await program.methods.withdraw().accounts({ signer: owner.publicKey, pool: pool_pda, poolVault: pool_vault_ata, poolLpVault: pool_lp_vault_ata, mint: mint, lpMint: lp_mint, userAta: owner_ata, userLpAta: owner_lp_ata, userPoolInfo: owner_pool_info_pda, config: config_pda, rent: anchor.web3.SYSVAR_RENT_PUBKEY, clock: anchor.web3.SYSVAR_CLOCK_PUBKEY, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+
   });
 });

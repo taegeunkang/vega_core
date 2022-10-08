@@ -1,12 +1,15 @@
+use std::ops::Mul;
+
+
 pub fn sqrt(y: u64) -> u64 {
-    let mut z: u64 = 0;
+    let mut _z: u64 = 0;
 
     if y > 3 {
-        z = y;
+        _z = y;
         let mut x = y.checked_div(2).unwrap().checked_add(1).unwrap();
 
         loop {
-            z = x;
+            _z = x;
             x = y
                 .checked_div(x)
                 .unwrap()
@@ -15,21 +18,17 @@ pub fn sqrt(y: u64) -> u64 {
                 .checked_div(2)
                 .unwrap();
 
-            if x >= z {
+            if x >= _z {
                 break;
             }
         }
     } else if y != 0 {
-        z = 1;
+        _z = 1;
     }
 
-    z
+    _z
 }
 
-pub fn min(_a: u64, _b: u64) -> u64 {
-    let mn = if _a > _b { _b } else { _a };
-    mn
-}
 
 
 pub fn fee_amount(_amount : u64, _fee_rate : u16) -> u64 {
@@ -41,18 +40,38 @@ pub fn calc_lp_amount(_pool_vault_amount : u64, _pool_lp_supply : u64, amount_in
     let pool_amount: u64 = _pool_vault_amount;
 
     let total_supply: u64 = _pool_lp_supply;
-    let mut liquidity: u64 = 0;
+    let mut _liquidity: u64 = 0;
 
     if total_supply == 0 {
-        liquidity = sqrt(amount_in).checked_sub(1000).unwrap();
+        _liquidity = sqrt(amount_in).checked_sub(1000).unwrap();
         //1000개 기본 락
     } else {
-        liquidity = amount_in
+        _liquidity = amount_in
             .checked_mul(total_supply)
             .unwrap()
             .checked_div(pool_amount)
             .unwrap();
     }
 
-    liquidity
+    _liquidity
 }
+
+pub fn calc_reward_percent(_deposit_amount : u64,_start : u64, _end : u64, _before_lp : u64, _after_lp :u64) -> u64 {
+    
+    let duration : u64 = _end.checked_sub(_start).unwrap();
+    let standard_time : u64 = 2;
+    let reward_rate : u64 = 3;
+    let reward_amount_per_2_sec : u64 = _deposit_amount.checked_mul(reward_rate).unwrap().checked_div(100_000).unwrap();
+
+    let mut reward :u64 = duration.checked_div(standard_time).unwrap().checked_mul(reward_amount_per_2_sec).unwrap();
+
+    let after : u64 = _after_lp.mul(100);
+    
+    let p = after.checked_div(_before_lp).unwrap();
+
+    reward = reward.checked_mul(p).unwrap().checked_div(100).unwrap();
+    reward
+    // fee amount = amount * fee_rate (ex: 30) / 10_000 -> 0.3%
+    
+}
+
