@@ -57,30 +57,16 @@ pub mod vega_core {
         token::transfer(ctx.accounts.into_transfer_cpi_context_mint(), _amount)?;
         let sol_amount = _amount.checked_div(10).unwrap();
 
-        **ctx.accounts.pool_vault.to_account_info().try_borrow_mut_lamports()? -= sol_amount;
-        **ctx.accounts.signer.to_account_info().try_borrow_mut_lamports()? += sol_amount;
-
-        // // transfer sol to signer
-        // let seeds = &[
-        //     b"pool".as_ref(),
-        //     ctx.accounts.config.key.as_ref(),
-        //     ctx.accounts.mint.to_account_info().key.as_ref(),
-        //     &[ctx.accounts.pool.bump],
-        // ];
-        // let signer = &[&seeds[..]];
-
-        // let cpi_context = CpiContext::new_with_signer(
-        //     ctx.accounts.system_program.to_account_info(),
-        //     system_program::Transfer {
-        //         from: ctx.accounts.pool_vault.to_account_info(),
-        //         to: ctx.accounts.signer.to_account_info(),
-        //     },
-        //     signer,
-        // );
-        // let sol_amount = _amount.checked_div(10).unwrap();
-
-        // system_program::transfer(cpi_context, sol_amount)?;
-
+        **ctx
+            .accounts
+            .pool
+            .to_account_info()
+            .try_borrow_mut_lamports()? -= sol_amount;
+        **ctx
+            .accounts
+            .signer
+            .to_account_info()
+            .try_borrow_mut_lamports()? += sol_amount;
         ProgramResult::Ok(())
     }
 
@@ -327,7 +313,7 @@ impl<'info> Buy<'info> {
             self.system_program.to_account_info(),
             system_program::Transfer {
                 from: self.signer.to_account_info(),
-                to: self.pool_vault.to_account_info(),
+                to: self.pool.to_account_info(),
             },
         )
     }

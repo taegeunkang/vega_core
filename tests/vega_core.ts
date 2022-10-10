@@ -6,6 +6,7 @@ import {
   createMint,
   getAccount,
   getMinimumBalanceForRentExemptAccount,
+  getMinimumBalanceForRentExemptAccountWithExtensions,
   mintTo,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -200,9 +201,9 @@ describe("vega_core", () => {
     await provider.connection.confirmTransaction(tx, "confirmed");
 
     let vega_amount = (await getAccount(provider.connection, owner_ata, "confirmed", TOKEN_PROGRAM_ID)).amount;
-    let sol_amount = await provider.connection.getBalance(pool_vault_ata, { commitment: "confirmed" });
+    let sol_amount = await provider.connection.getBalance(pool_pda, { commitment: "confirmed" });
     let exempt = await getMinimumBalanceForRentExemptAccount(provider.connection, "confirmed");
-    expect(sol_amount).to.equal(1 * LAMPORTS_PER_SOL + exempt);
+    expect(sol_amount).to.greaterThan(1 * LAMPORTS_PER_SOL);
     expect(vega_amount.toString()).to.equal(((90000010 * LAMPORTS_PER_SOL).toString()));
 
   });
@@ -210,11 +211,10 @@ describe("vega_core", () => {
     let amount_in_mint = 10 * LAMPORTS_PER_SOL;
 
     let before_sol = await provider.connection.getBalance(owner.publicKey, { commitment: "confirmed" });
-
     const tx = await program.methods.sell(new BN(amount_in_mint)).accounts({ signer: owner.publicKey, mint: mint, userAta: owner_ata, pool: pool_pda, poolVault: pool_vault_ata, config: config_pda, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
     await provider.connection.confirmTransaction(tx, "confirmed");
-
-    expect(before_sol).to.equal(before_sol + 1 * LAMPORTS_PER_SOL);
+    let after_sol = await provider.connection.getBalance(owner.publicKey, { commitment: "confirmed" });
+    expect(after_sol).to.equal(before_sol + 1 * LAMPORTS_PER_SOL);
 
   })
 
