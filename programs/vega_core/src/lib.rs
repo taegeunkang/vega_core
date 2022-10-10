@@ -1,6 +1,7 @@
 use anchor_lang::solana_program::entrypoint::ProgramResult;
+use anchor_lang::system_program;
 use anchor_lang::{prelude::*, solana_program};
-use anchor_spl::token;
+use anchor_spl::token::{self, Mint};
 use anchor_spl::token::{Token, TokenAccount, Transfer};
 declare_id!("Cbvd322Xp7Qfkf2VvgyCH4cKkJXwypDYsGK8upAm3ZXK");
 
@@ -12,6 +13,8 @@ use utils::*;
 #[program]
 pub mod vega_core {
 
+    use anchor_lang::solana_program::native_token::LAMPORTS_PER_SOL;
+
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> ProgramResult {
@@ -21,11 +24,72 @@ pub mod vega_core {
         ProgramResult::Ok(())
     }
 
+    pub fn buy(ctx: Context<Buy>, _amount: u64) -> ProgramResult {
+        // receive sol from signer
+        system_program::transfer(ctx.accounts.into_transfer_cpi_context_sol(), _amount)?;
+
+        let seeds = &[
+            b"pool".as_ref(),
+            ctx.accounts.config.key.as_ref(),
+            ctx.accounts.mint.to_account_info().key.as_ref(),
+            &[ctx.accounts.pool.bump],
+        ];
+        let signer = &[&seeds[..]];
+
+        let vega_amount = _amount.checked_mul(10).unwrap();
+        // transfer vega to signer
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.pool_vault.to_account_info(),
+                to: ctx.accounts.user_ata.to_account_info(),
+                authority: ctx.accounts.pool.to_account_info(),
+            },
+            signer,
+        );
+        token::transfer(cpi_context, vega_amount)?;
+
+        ProgramResult::Ok(())
+    }
+
+    pub fn sell(ctx: Context<Sell>, _amount: u64) -> ProgramResult {
+        // receive vega from signer
+        token::transfer(ctx.accounts.into_transfer_cpi_context_mint(), _amount)?;
+        let sol_amount = _amount.checked_div(10).unwrap();
+
+        **ctx.accounts.pool_vault.to_account_info().try_borrow_mut_lamports()? -= sol_amount;
+        **ctx.accounts.signer.to_account_info().try_borrow_mut_lamports()? += sol_amount;
+
+        // // transfer sol to signer
+        // let seeds = &[
+        //     b"pool".as_ref(),
+        //     ctx.accounts.config.key.as_ref(),
+        //     ctx.accounts.mint.to_account_info().key.as_ref(),
+        //     &[ctx.accounts.pool.bump],
+        // ];
+        // let signer = &[&seeds[..]];
+
+        // let cpi_context = CpiContext::new_with_signer(
+        //     ctx.accounts.system_program.to_account_info(),
+        //     system_program::Transfer {
+        //         from: ctx.accounts.pool_vault.to_account_info(),
+        //         to: ctx.accounts.signer.to_account_info(),
+        //     },
+        //     signer,
+        // );
+        // let sol_amount = _amount.checked_div(10).unwrap();
+
+        // system_program::transfer(cpi_context, sol_amount)?;
+
+        ProgramResult::Ok(())
+    }
+
     pub fn create_pool(ctx: Context<CreateStakingPool>) -> ProgramResult {
         ctx.accounts.init(ctx.program_id.clone());
 
-        let decimal: u64 = 1000000000;
-        let lp_amount: u64 = 100000000 * decimal;
+        let mint_amount: u64 = 10000000 * LAMPORTS_PER_SOL;
+        let lp_amount: u64 = 100000000 * LAMPORTS_PER_SOL;
+        token::transfer(ctx.accounts.into_transfer_cpi_context_mint(), mint_amount)?;
         token::transfer(ctx.accounts.into_transfer_cpi_context_lp(), lp_amount)?;
 
         ProgramResult::Ok(())
@@ -111,6 +175,42 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(_amount : u64)]
+pub struct Buy<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+    pub mint: Account<'info, Mint>,
+    #[account(mut, constraint = user_ata.owner == signer.key())]
+    pub user_ata: Account<'info, TokenAccount>,
+    #[account(mut, seeds = [b"pool", config.key().as_ref(), mint.key().as_ref()], bump)]
+    pub pool: Box<Account<'info, Pool>>,
+    #[account(mut,seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, constraint = pool_vault.owner == pool.key())]
+    pub pool_vault: Box<Account<'info, TokenAccount>>,
+    /// CHECK : this is safe
+    pub config: AccountInfo<'info>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction()]
+pub struct Sell<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+    pub mint: Account<'info, Mint>,
+    #[account(mut, constraint = user_ata.owner == signer.key())]
+    pub user_ata: Account<'info, TokenAccount>,
+    #[account(mut, seeds = [b"pool", config.key().as_ref(), mint.key().as_ref()], bump)]
+    pub pool: Box<Account<'info, Pool>>,
+    #[account(mut,seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, constraint = pool_vault.owner == pool.key())]
+    pub pool_vault: Box<Account<'info, TokenAccount>>,
+    /// CHECK : this is safe
+    pub config: AccountInfo<'info>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 #[instruction()]
 pub struct CreateStakingPool<'info> {
     #[account(mut, constraint = signer.key() == config.authority)]
@@ -130,6 +230,9 @@ pub struct CreateStakingPool<'info> {
     /// CHECK : this is safe
     #[account(mut)]
     pub user_lp_ata: AccountInfo<'info>,
+    /// CHECK : this is safe
+    #[account(mut)]
+    pub user_ata: AccountInfo<'info>,
     #[account(mut, seeds=[b"config"], bump)]
     pub config: Account<'info, Config>,
     #[account(address = solana_program::sysvar::rent::ID)]
@@ -216,6 +319,33 @@ impl<'info> Initialize<'info> {
     }
 }
 
+impl<'info> Buy<'info> {
+    pub fn into_transfer_cpi_context_sol(
+        &self,
+    ) -> CpiContext<'_, '_, '_, 'info, system_program::Transfer<'info>> {
+        CpiContext::new(
+            self.system_program.to_account_info(),
+            system_program::Transfer {
+                from: self.signer.to_account_info(),
+                to: self.pool_vault.to_account_info(),
+            },
+        )
+    }
+}
+
+impl<'info> Sell<'info> {
+    pub fn into_transfer_cpi_context_mint(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        CpiContext::new(
+            self.token_program.to_account_info(),
+            Transfer {
+                from: self.user_ata.to_account_info(),
+                to: self.pool_vault.to_account_info(),
+                authority: self.signer.to_account_info(),
+            },
+        )
+    }
+}
+
 impl<'info> CreateStakingPool<'info> {
     pub fn init(&mut self, _program_id: Pubkey) {
         self.pool.fee_rate = self.config.fee_rate;
@@ -227,6 +357,16 @@ impl<'info> CreateStakingPool<'info> {
 
         let _bump = find_pool_bump(self.config.key(), self.mint.key(), _program_id);
         self.pool.bump = _bump;
+    }
+    pub fn into_transfer_cpi_context_mint(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        CpiContext::new(
+            self.token_program.to_account_info(),
+            Transfer {
+                from: self.user_ata.clone(),
+                to: self.pool_vault.to_account_info(),
+                authority: self.signer.to_account_info(),
+            },
+        )
     }
 
     pub fn into_transfer_cpi_context_lp(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {

@@ -5,6 +5,7 @@ import {
   createAssociatedTokenAccount,
   createMint,
   getAccount,
+  getMinimumBalanceForRentExemptAccount,
   mintTo,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -175,6 +176,7 @@ describe("vega_core", () => {
         poolVault: pool_vault_ata,
         poolLpVault: pool_lp_vault_ata,
         userLpAta: owner_lp_ata,
+        userAta: owner_ata,
         config: config_pda,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -183,8 +185,41 @@ describe("vega_core", () => {
       .rpc();
 
     await provider.connection.confirmTransaction(tx, "confirmed");
+
+    let mint_amount = (await getAccount(provider.connection, owner_ata, "confirmed", TOKEN_PROGRAM_ID)).amount;
+    let lp_amount = (await getAccount(provider.connection, owner_lp_ata, "confirmed", TOKEN_PROGRAM_ID)).amount;
+
+    expect(mint_amount.toString()).to.equal((90000000 * LAMPORTS_PER_SOL).toString());
+    expect(lp_amount.toString()).to.equal('0');
+
   });
-  it("add liquidity", async () => {
+  it("buy mint", async () => {
+
+    let amount_in_sol = 1 * LAMPORTS_PER_SOL;
+    const tx = await program.methods.buy(new BN(amount_in_sol)).accounts({ signer: owner.publicKey, mint: mint, userAta: owner_ata, pool: pool_pda, poolVault: pool_vault_ata, config: config_pda, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
+    await provider.connection.confirmTransaction(tx, "confirmed");
+
+    let vega_amount = (await getAccount(provider.connection, owner_ata, "confirmed", TOKEN_PROGRAM_ID)).amount;
+    let sol_amount = await provider.connection.getBalance(pool_vault_ata, { commitment: "confirmed" });
+    let exempt = await getMinimumBalanceForRentExemptAccount(provider.connection, "confirmed");
+    expect(sol_amount).to.equal(1 * LAMPORTS_PER_SOL + exempt);
+    expect(vega_amount.toString()).to.equal(((90000010 * LAMPORTS_PER_SOL).toString()));
+
+  });
+  it("sell mint", async () => {
+    let amount_in_mint = 10 * LAMPORTS_PER_SOL;
+
+    let before_sol = await provider.connection.getBalance(owner.publicKey, { commitment: "confirmed" });
+
+    const tx = await program.methods.sell(new BN(amount_in_mint)).accounts({ signer: owner.publicKey, mint: mint, userAta: owner_ata, pool: pool_pda, poolVault: pool_vault_ata, config: config_pda, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
+    await provider.connection.confirmTransaction(tx, "confirmed");
+
+    expect(before_sol).to.equal(before_sol + 1 * LAMPORTS_PER_SOL);
+
+  })
+
+
+  it("deposit", async () => {
     let [owner_pool_info_pda, _4] = findProgramAddressSync(
       [
         Buffer.from(anchor.utils.bytes.utf8.encode("user_pool_info")),
