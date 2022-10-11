@@ -336,21 +336,12 @@ describe("vega_core", () => {
 
     await provider.connection.confirmTransaction(tx, "confirmed");
 
-    const another_01_lp_mint_account = await getAccount(
-      provider.connection,
-      another_01_lp_mint_ata,
-      "confirmed",
-      TOKEN_PROGRAM_ID
-    );
-    const owner_lp_mint_account = await getAccount(
-      provider.connection,
-      owner_lp_ata,
-      "confirmed",
-      TOKEN_PROGRAM_ID
-    );
+    const another_01_lp_mint_account = (await program.account.userPoolInfo.fetch(another_01_pool_info_pda)).lpAmount;
+    const owner_lp_mint_account = (await program.account.userPoolInfo.fetch(owner_lp_ata)).lpAmount;
 
-    expect(another_01_lp_mint_account.amount.toString()).to.equal(
-      owner_lp_mint_account.amount.toString()
+
+    expect(another_01_lp_mint_account.toString()).to.equal(
+      owner_lp_mint_account.toString()
     );
   });
 

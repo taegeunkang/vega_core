@@ -3,6 +3,7 @@ use anchor_lang::system_program;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{self, Mint};
 use anchor_spl::token::{Token, TokenAccount, Transfer};
+use chainlink_solana as chainlink;
 declare_id!("Cbvd322Xp7Qfkf2VvgyCH4cKkJXwypDYsGK8upAm3ZXK");
 
 mod states;
@@ -74,9 +75,7 @@ pub mod vega_core {
         ctx.accounts.init(ctx.program_id.clone());
 
         let mint_amount: u64 = 10000000 * LAMPORTS_PER_SOL;
-        let lp_amount: u64 = 100000000 * LAMPORTS_PER_SOL;
         token::transfer(ctx.accounts.into_transfer_cpi_context_mint(), mint_amount)?;
-        token::transfer(ctx.accounts.into_transfer_cpi_context_lp(), lp_amount)?;
 
         ProgramResult::Ok(())
     }
@@ -84,7 +83,7 @@ pub mod vega_core {
     pub fn deposit(ctx: Context<Deposit>, _amount_in: u64) -> ProgramResult {
         token::transfer(ctx.accounts.into_transfer_cpi_context_mint(), _amount_in)?;
 
-        let amount_fee: u64 = fee_amount(_amount_in, ctx.accounts.pool.fee_rate);
+        let amount_fee: u64 = calc_fee_amount(_amount_in, ctx.accounts.pool.fee_rate);
         let amount: u64 = _amount_in.checked_sub(amount_fee).unwrap();
         let vault_amount: u64 = ctx.accounts.pool.vault_amount.checked_add(amount).unwrap();
         let lp_amount: u64 = calc_lp_amount(vault_amount, ctx.accounts.pool.lp_supply, amount);
@@ -95,35 +94,11 @@ pub mod vega_core {
 
         ctx.accounts.init_user_pool_info(amount, lp_amount);
 
-        let seeds = &[
-            b"pool".as_ref(),
-            ctx.accounts.config.to_account_info().key.as_ref(),
-            ctx.accounts.mint.key.as_ref(),
-            &[ctx.accounts.pool.bump],
-        ];
-        let signer = &[&seeds[..]];
-
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.pool_lp_vault.to_account_info(),
-                to: ctx.accounts.user_lp_ata.clone(),
-                authority: ctx.accounts.pool.to_account_info(),
-            },
-            signer,
-        );
-        token::transfer(cpi_context, lp_amount)?;
-
         ProgramResult::Ok(())
     }
 
     pub fn withdraw(ctx: Context<Withdraw>) -> ProgramResult {
         let reward: u64 = ctx.accounts.calc_reward();
-
-        token::transfer(
-            ctx.accounts.into_transfer_cpi_context_lp(),
-            ctx.accounts.user_lp_ata.amount,
-        )?;
 
         let seeds = &[
             b"pool".as_ref(),
@@ -143,6 +118,52 @@ pub mod vega_core {
             signer,
         );
         token::transfer(cpi_context, reward)?;
+
+        ProgramResult::Ok(())
+    }
+
+    pub fn trade_in(ctx: Context<TradeIn>, _way: u8, _amount: u64) -> ProgramResult {
+        let _round = chainlink::latest_round_data(
+            ctx.accounts.chainlink_program.to_account_info(),
+            ctx.accounts.chainlink_feed.to_account_info(),
+        )?;
+
+        let _decimals = chainlink::decimals(
+            ctx.accounts.chainlink_program.to_account_info(),
+            ctx.accounts.chainlink_feed.to_account_info(),
+        )?;
+        let _current_price = _round.answer as u64;
+        msg!(
+            "current price : {}, decimals : {}",
+            _current_price,
+            _decimals
+        );
+        msg!(
+            "trade_in way : {}, current_price : {}, decimals : {}, amount : {}",
+            _way,
+            _current_price,
+            _decimals,
+            _amount
+        );
+
+        ctx.accounts.init(_way, _amount, _current_price, _decimals);
+
+        ProgramResult::Ok(())
+    }
+
+    pub fn trade_out (ctx: Context<TradeOut>) -> ProgramResult {
+        let _round = chainlink::latest_round_data(
+            ctx.accounts.chainlink_program.to_account_info(),
+            ctx.accounts.chainlink_feed.to_account_info(),
+        )?;
+
+        let _decimals = chainlink::decimals(
+            ctx.accounts.chainlink_program.to_account_info(),
+            ctx.accounts.chainlink_feed.to_account_info(),
+        )?;
+        let _current_price = _round.answer as u64;
+
+
 
         ProgramResult::Ok(())
     }
@@ -206,16 +227,8 @@ pub struct CreateStakingPool<'info> {
     /// CHECK : this is safe
     #[account(mut)]
     pub mint: AccountInfo<'info>,
-    /// CHECK : this is safe
-    #[account(mut)]
-    pub lp_mint: AccountInfo<'info>,
     #[account(init,seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, payer = signer, token::mint = mint, token::authority = pool)]
     pub pool_vault: Box<Account<'info, TokenAccount>>,
-    #[account(init, seeds=[pool.key().as_ref(), lp_mint.key().as_ref()], bump, payer = signer, token::mint = lp_mint, token::authority = pool)]
-    pub pool_lp_vault: Box<Account<'info, TokenAccount>>,
-    /// CHECK : this is safe
-    #[account(mut)]
-    pub user_lp_ata: AccountInfo<'info>,
     /// CHECK : this is safe
     #[account(mut)]
     pub user_ata: AccountInfo<'info>,
@@ -236,20 +249,12 @@ pub struct Deposit<'info> {
     pub pool: Box<Account<'info, Pool>>,
     #[account(mut, seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, constraint = pool_vault.owner == pool.key())]
     pub pool_vault: Box<Account<'info, TokenAccount>>,
-    #[account(mut, seeds=[pool.key().as_ref(), lp_mint.key().as_ref()], bump, constraint = pool_lp_vault.owner == pool.key())]
-    pub pool_lp_vault: Box<Account<'info, TokenAccount>>,
     /// CHECK : this is safe
     #[account(mut)]
     pub mint: AccountInfo<'info>,
     /// CHECK : this is safe
     #[account(mut)]
-    pub lp_mint: AccountInfo<'info>,
-    /// CHECK : this is safe
-    #[account(mut)]
     pub user_ata: AccountInfo<'info>,
-    /// CHECK : this is safe
-    #[account(mut)]
-    pub user_lp_ata: AccountInfo<'info>,
     #[account(init, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump, payer = signer, space = 8 + std::mem::size_of::<UserPoolInfo>())]
     pub user_pool_info: Box<Account<'info, UserPoolInfo>>,
     #[account(mut, seeds=[b"config"], bump)]
@@ -271,20 +276,12 @@ pub struct Withdraw<'info> {
     pub pool: Box<Account<'info, Pool>>,
     #[account(mut, seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, constraint = pool_vault.owner == pool.key())]
     pub pool_vault: Box<Account<'info, TokenAccount>>,
-    #[account(mut, seeds=[pool.key().as_ref(), lp_mint.key().as_ref()], bump, constraint = pool_lp_vault.owner == pool.key())]
-    pub pool_lp_vault: Box<Account<'info, TokenAccount>>,
     /// CHECK : this is safe
     #[account(mut)]
     pub mint: AccountInfo<'info>,
     /// CHECK : this is safe
     #[account(mut)]
-    pub lp_mint: AccountInfo<'info>,
-    /// CHECK : this is safe
-    #[account(mut)]
     pub user_ata: AccountInfo<'info>,
-    /// CHECK : this is safe
-    #[account(mut, token::mint = lp_mint, token::authority = signer)]
-    pub user_lp_ata: Account<'info, TokenAccount>,
     #[account(mut, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump, close = signer)]
     pub user_pool_info: Box<Account<'info, UserPoolInfo>>,
     #[account(mut, seeds=[b"config"], bump)]
@@ -294,6 +291,48 @@ pub struct Withdraw<'info> {
     #[account(address = solana_program::sysvar::clock::ID)]
     pub clock: Sysvar<'info, Clock>,
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(_way : u8, _amount : u64)]
+pub struct TradeIn<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+    /// CHECK : this is safe
+    #[account(mut)]
+    pub pool: AccountInfo<'info>,
+    #[account(init, seeds=[b"trade", signer.key().as_ref()], bump, payer = signer, space= 8 + std::mem::size_of::<TradeInfo>())]
+    pub trade_info: Box<Account<'info, TradeInfo>>,
+    #[account(mut, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump)]
+    pub user_pool_info: Box<Account<'info, UserPoolInfo>>,
+    /// CHECK: We're reading data from this specified chainlink feed
+    pub chainlink_feed: AccountInfo<'info>,
+    /// CHECK: This is the Chainlink program library on Devnet
+    pub chainlink_program: AccountInfo<'info>,
+    #[account(address = solana_program::sysvar::clock::ID)]
+    pub clock: Sysvar<'info, Clock>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction()]
+pub struct TradeOut<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+    /// CHECK : this is safe
+    #[account(mut)]
+    pub pool: AccountInfo<'info>,
+    #[account(mut, seeds=[b"trade", signer.key().as_ref()], bump)]
+    pub trade_info: Box<Account<'info, TradeInfo>>,
+    #[account(mut, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump)]
+    pub user_pool_info: Box<Account<'info, UserPoolInfo>>,
+    /// CHECK: We're reading data from this specified chainlink feed
+    pub chainlink_feed: AccountInfo<'info>,
+    /// CHECK: This is the Chainlink program library on Devnet
+    pub chainlink_program: AccountInfo<'info>,
+    #[account(address = solana_program::sysvar::clock::ID)]
+    pub clock: Sysvar<'info, Clock>,
     pub system_program: Program<'info, System>,
 }
 
@@ -337,7 +376,6 @@ impl<'info> CreateStakingPool<'info> {
         self.pool.fee_rate = self.config.fee_rate;
         self.pool.mint = self.mint.key();
         self.pool.vault = self.pool_vault.key();
-        self.pool.lp_mint = self.lp_mint.key();
         self.pool.lp_supply = 0;
         self.pool.vault_amount = 0;
 
@@ -354,17 +392,6 @@ impl<'info> CreateStakingPool<'info> {
             },
         )
     }
-
-    pub fn into_transfer_cpi_context_lp(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
-        CpiContext::new(
-            self.token_program.to_account_info(),
-            Transfer {
-                from: self.user_lp_ata.clone(),
-                to: self.pool_lp_vault.to_account_info(),
-                authority: self.signer.to_account_info(),
-            },
-        )
-    }
 }
 
 impl<'info> Deposit<'info> {
@@ -375,6 +402,7 @@ impl<'info> Deposit<'info> {
         self.user_pool_info.deposited_amount = _amount;
         self.user_pool_info.deposited_time = self.clock.unix_timestamp as u64;
         self.user_pool_info.lp_amount = _lp_amount;
+        self.user_pool_info.current_lp_amount = _lp_amount;
         self.pool.vault_amount = self.pool.vault_amount.checked_add(_amount).unwrap();
     }
 
@@ -391,24 +419,13 @@ impl<'info> Deposit<'info> {
 }
 
 impl<'info> Withdraw<'info> {
-    pub fn into_transfer_cpi_context_lp(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
-        CpiContext::new(
-            self.token_program.to_account_info(),
-            Transfer {
-                from: self.user_lp_ata.to_account_info(),
-                to: self.pool_lp_vault.to_account_info(),
-                authority: self.signer.to_account_info(),
-            },
-        )
-    }
-
     pub fn calc_reward(&self) -> u64 {
         let reward: u64 = calc_reward_percent(
             self.user_pool_info.deposited_amount,
             self.user_pool_info.deposited_time,
             self.clock.unix_timestamp as u64,
             self.user_pool_info.lp_amount,
-            self.user_lp_ata.amount,
+            self.user_pool_info.current_lp_amount,
         );
         msg!(
             "user : {} withdraw start : {} , end : {}, deposit : {}, reward : {}",
@@ -419,5 +436,15 @@ impl<'info> Withdraw<'info> {
             reward.clone()
         );
         reward
+    }
+}
+
+impl<'info> TradeIn<'info> {
+    pub fn init(&mut self, _way: u8, _amount: u64, _current_price: u64, _decimals: u8) {
+        self.trade_info.authority = self.signer.key();
+        self.trade_info.way = _way;
+        self.trade_info.amount = _amount;
+        self.trade_info.entry_price = _current_price;
+        self.trade_info.decimals = _decimals;
     }
 }
