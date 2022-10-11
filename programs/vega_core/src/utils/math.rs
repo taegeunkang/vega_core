@@ -1,4 +1,3 @@
-use std::ops::{Mul, Sub};
 
 pub fn sqrt(y: u64) -> u64 {
     let mut _z: u64 = 0;
@@ -28,25 +27,25 @@ pub fn sqrt(y: u64) -> u64 {
     _z
 }
 
-pub fn calc_fee_amount(_amount: u64, _fee_rate: u16) -> u64 {
-    _amount
-        .checked_mul(_fee_rate as u64)
+pub fn calc_fee_amount(amount: u64, fee_rate: u8) -> u64 {
+    amount
+        .checked_mul(fee_rate as u64)
         .unwrap()
         .checked_div(10_000)
         .unwrap()
 }
 
-pub fn calc_lp_amount(_pool_vault_amount: u64, _pool_lp_supply: u64, amount_in: u64) -> u64 {
-    let pool_amount: u64 = _pool_vault_amount;
+pub fn calc_lp_amount(pool_vault_amount: u64, pool_lp_supply: u64, amount: u64) -> u64 {
+    let pool_amount: u64 = pool_vault_amount;
 
-    let total_supply: u64 = _pool_lp_supply;
+    let total_supply: u64 = pool_lp_supply;
     let mut _liquidity: u64 = 0;
 
     if total_supply == 0 {
-        _liquidity = sqrt(amount_in).checked_sub(1000).unwrap();
+        _liquidity = sqrt(amount).checked_sub(1000).unwrap();
         //1000개 기본 락
     } else {
-        _liquidity = amount_in
+        _liquidity = amount
             .checked_mul(total_supply)
             .unwrap()
             .checked_div(pool_amount)
