@@ -1,4 +1,4 @@
-use std::ops::Mul;
+use std::ops::{Mul, Sub};
 
 pub fn sqrt(y: u64) -> u64 {
     let mut _z: u64 = 0;
@@ -78,34 +78,44 @@ pub fn calc_reward_percent(
         .checked_mul(reward_amount_per_2_sec)
         .unwrap();
 
-    let after: u64 = _after_lp.mul(100);
-
-    let p = after.checked_div(_before_lp).unwrap();
-
-    reward = reward.checked_mul(p).unwrap().checked_div(100).unwrap();
-    reward
-    // fee amount = amount * fee_rate (ex: 30) / 10_000 -> 0.3%
+    reward = _before_lp.checked_add(reward).unwrap();
+    let (pr, is_pl) = calc_pl(_before_lp, _after_lp, 0);
+    
+    calc_trade_out_lp_amount(reward, pr, is_pl)
 }
 
-pub fn calc_pl(_entry: u64, _out: u64, _way: u8) -> (u64, u8) {
-    let _r : u64;
-    let pl : bool;
-    if _way == 0 {
-        if _entry <= _out {
-            let a = _entry.checked_mul(100).unwrap();
-            let b = _out.checked_sub(_entry).unwrap().checked_mul(100).unwrap();
-            _r = b.checked_div(a).unwrap().checked_div(100).unwrap();
-            pl = true;
+pub fn calc_pl(_entry: u64, _out: u64, _way: u8) -> (u64, bool) {
+    
+    if _entry <= _out {
+        let a = _entry.checked_mul(100).unwrap();
+        let b = _out.checked_sub(_entry).unwrap().checked_mul(100).unwrap();
+        let pr = b.checked_mul(100).unwrap().checked_div(a).unwrap();
+        let pl = if _way == 0 {true} else {false};
+        return (pr, pl );
 
-        } else {
-            let a = _entry.checked_mul(100).unwrap();
-            let b = _entry.checked_sub(_out).unwrap().checked_mul(100).unwrap();
-            _r = b.checked_div(a).unwrap().checked_div(100).unwrap();
-            pl = false;
-        }
     } else {
+        let a = _entry.checked_mul(100).unwrap();
+        let b = _entry.checked_sub(_out).unwrap().checked_mul(100).unwrap();
+        let pr = b.checked_mul(100).unwrap().checked_div(a).unwrap();
+        let pl = if _way == 0 {false} else {true};
+        return (pr, pl);
+
+    }
+}
+
+pub fn calc_trade_out_lp_amount (_current_lp : u64, _percentage :u64, _pl : bool) -> u64 {
+    if _pl {
+        let a = _percentage.checked_add(100).unwrap();
+        return _current_lp.checked_mul(a).unwrap().checked_div(100).unwrap();
+    } else {
+        if _percentage >= 100 {
+            return 0;
+        }else {
+            let b : u64 = 100;
+            let c = b.checked_sub(_percentage).unwrap();
+            return _current_lp.checked_mul(c).unwrap().checked_div(100).unwrap();
+        }
 
     }
 
-    (_r, pl);
 }

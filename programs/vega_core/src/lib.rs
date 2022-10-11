@@ -162,8 +162,12 @@ pub mod vega_core {
             ctx.accounts.chainlink_feed.to_account_info(),
         )?;
         let _current_price = _round.answer as u64;
-
-
+        
+        let (percentage, pl )= calc_pl(ctx.accounts.trade_info.entry_price, _current_price, ctx.accounts.trade_info.way);
+        let _lp_amount = calc_trade_out_lp_amount(ctx.accounts.user_pool_info.current_lp_amount, percentage, pl);
+        msg!("user trade out");
+        msg!("trade in : {}, trade out : {}", ctx.accounts.user_pool_info.current_lp_amount, _lp_amount);
+        ctx.accounts.user_pool_info.current_lp_amount = _lp_amount;
 
         ProgramResult::Ok(())
     }
@@ -323,7 +327,7 @@ pub struct TradeOut<'info> {
     /// CHECK : this is safe
     #[account(mut)]
     pub pool: AccountInfo<'info>,
-    #[account(mut, seeds=[b"trade", signer.key().as_ref()], bump)]
+    #[account(mut, seeds=[b"trade", signer.key().as_ref()], bump, close = signer)]
     pub trade_info: Box<Account<'info, TradeInfo>>,
     #[account(mut, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump)]
     pub user_pool_info: Box<Account<'info, UserPoolInfo>>,
@@ -428,7 +432,7 @@ impl<'info> Withdraw<'info> {
             self.user_pool_info.current_lp_amount,
         );
         msg!(
-            "user : {} withdraw start : {} , end : {}, deposit : {}, reward : {}",
+            "user : {} withdraw start : {} , end : {}, deposit : {}, withdraw: {}",
             self.signer.key(),
             self.user_pool_info.deposited_time,
             self.clock.unix_timestamp as u64,
