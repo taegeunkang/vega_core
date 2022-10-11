@@ -18,7 +18,6 @@ pub struct Deposit<'info> {
     /// CHECK : this is safe
     #[account(mut)]
     pub mint: AccountInfo<'info>,
-    /// CHECK : this is safe
     #[account(mut)]
     pub user_ata: Account<'info, TokenAccount>,
     #[account(init, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump, payer = signer, space = 8 + std::mem::size_of::<UserPoolInfo>())]

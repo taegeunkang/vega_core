@@ -1,4 +1,3 @@
-
 pub fn sqrt(y: u64) -> u64 {
     let mut _z: u64 = 0;
 
@@ -56,16 +55,16 @@ pub fn calc_lp_amount(pool_vault_amount: u64, pool_lp_supply: u64, amount: u64) 
 }
 
 pub fn calc_reward_percent(
-    _deposit_amount: u64,
-    _start: u64,
-    _end: u64,
-    _before_lp: u64,
-    _after_lp: u64,
+    deposit_amount: u64,
+    start: u64,
+    end: u64,
+    before_lp: u64,
+    after_lp: u64,
 ) -> u64 {
-    let duration: u64 = _end.checked_sub(_start).unwrap();
+    let duration: u64 = end.checked_sub(start).unwrap();
     let standard_time: u64 = 2;
     let reward_rate: u64 = 3;
-    let reward_amount_per_2_sec: u64 = _deposit_amount
+    let reward_amount_per_2_sec: u64 = deposit_amount
         .checked_mul(reward_rate)
         .unwrap()
         .checked_div(10_000_000)
@@ -77,44 +76,47 @@ pub fn calc_reward_percent(
         .checked_mul(reward_amount_per_2_sec)
         .unwrap();
 
-    reward = _before_lp.checked_add(reward).unwrap();
-    let (pr, is_pl) = calc_pl(_before_lp, _after_lp, 0);
-    
+    reward = before_lp.checked_add(reward).unwrap();
+    let (pr, is_pl) = calc_pl(before_lp, after_lp, 0);
+
     calc_trade_out_lp_amount(reward, pr, is_pl)
 }
 
 pub fn calc_pl(_entry: u64, _out: u64, _way: u8) -> (u64, bool) {
-    
     if _entry <= _out {
         let a = _entry.checked_mul(100).unwrap();
         let b = _out.checked_sub(_entry).unwrap().checked_mul(100).unwrap();
         let pr = b.checked_mul(100).unwrap().checked_div(a).unwrap();
-        let pl = if _way == 0 {true} else {false};
-        return (pr, pl );
-
+        let pl = if _way == 0 { true } else { false };
+        return (pr, pl);
     } else {
         let a = _entry.checked_mul(100).unwrap();
         let b = _entry.checked_sub(_out).unwrap().checked_mul(100).unwrap();
         let pr = b.checked_mul(100).unwrap().checked_div(a).unwrap();
-        let pl = if _way == 0 {false} else {true};
+        let pl = if _way == 0 { false } else { true };
         return (pr, pl);
-
     }
 }
 
-pub fn calc_trade_out_lp_amount (_current_lp : u64, _percentage :u64, _pl : bool) -> u64 {
+pub fn calc_trade_out_lp_amount(_current_lp: u64, _percentage: u64, _pl: bool) -> u64 {
     if _pl {
         let a = _percentage.checked_add(100).unwrap();
-        return _current_lp.checked_mul(a).unwrap().checked_div(100).unwrap();
+        return _current_lp
+            .checked_mul(a)
+            .unwrap()
+            .checked_div(100)
+            .unwrap();
     } else {
         if _percentage >= 100 {
             return 0;
-        }else {
-            let b : u64 = 100;
+        } else {
+            let b: u64 = 100;
             let c = b.checked_sub(_percentage).unwrap();
-            return _current_lp.checked_mul(c).unwrap().checked_div(100).unwrap();
+            return _current_lp
+                .checked_mul(c)
+                .unwrap()
+                .checked_div(100)
+                .unwrap();
         }
-
     }
-
 }

@@ -11,7 +11,6 @@ pub struct Initialize<'info> {
     #[account(init, seeds=[b"config"], bump, payer = signer, space = 8 + std::mem::size_of::<Config>())]
     pub config: Account<'info, Config>,
     /// CHECK : this is safe
-    pub lp_mint: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 

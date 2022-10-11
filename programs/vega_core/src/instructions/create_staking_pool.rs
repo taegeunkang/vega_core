@@ -18,7 +18,6 @@ pub struct CreateStakingPool<'info> {
     pub mint: AccountInfo<'info>,
     #[account(init,seeds=[pool.key().as_ref(), mint.key().as_ref()], bump, payer = signer, token::mint = mint, token::authority = pool)]
     pub pool_vault: Box<Account<'info, TokenAccount>>,
-    /// CHECK : this is safe
     #[account(mut)]
     pub user_ata: Account<'info, TokenAccount>,
     #[account(mut, seeds=[b"config"], bump)]

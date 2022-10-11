@@ -24,14 +24,11 @@ describe("vega_core", () => {
 
   const owner: Keypair = anchor.web3.Keypair.generate();
   let mint: PublicKey;
-  let lp_mint: PublicKey;
   let owner_ata: PublicKey;
-  let owner_lp_ata: PublicKey;
   let config_pda: PublicKey;
   let pool_pda: PublicKey;
   let pool_vault_ata: PublicKey;
-  let pool_lp_vault_ata: PublicKey;
-  before(async () => { });
+
 
   const request_sol = async (user: PublicKey) => {
     // request 10 sol
@@ -63,16 +60,7 @@ describe("vega_core", () => {
       { commitment: "confirmed" },
       TOKEN_PROGRAM_ID
     );
-    lp_mint = await createMint(
-      provider.connection,
-      owner,
-      owner.publicKey,
-      owner.publicKey,
-      9,
-      undefined,
-      { commitment: "confirmed" },
-      TOKEN_PROGRAM_ID
-    );
+
 
     owner_ata = await createAssociatedTokenAccount(
       provider.connection,
@@ -82,31 +70,13 @@ describe("vega_core", () => {
       { commitment: "confirmed" },
       TOKEN_PROGRAM_ID
     );
-    owner_lp_ata = await createAssociatedTokenAccount(
-      provider.connection,
-      owner,
-      lp_mint,
-      owner.publicKey,
-      { commitment: "confirmed" },
-      TOKEN_PROGRAM_ID
-    );
+
 
     await mintTo(
       provider.connection,
       owner,
       mint,
       owner_ata,
-      owner,
-      100000000 * LAMPORTS_PER_SOL,
-      [],
-      { commitment: "confirmed" },
-      TOKEN_PROGRAM_ID
-    );
-    await mintTo(
-      provider.connection,
-      owner,
-      lp_mint,
-      owner_lp_ata,
       owner,
       100000000 * LAMPORTS_PER_SOL,
       [],
@@ -131,11 +101,10 @@ describe("vega_core", () => {
       program.programId
     );
     await program.methods
-      .initialize()
+      .initialize(30)
       .accounts({
         signer: owner.publicKey,
         config: config_pda,
-        lpMint: lp_mint,
       })
       .signers([owner])
       .rpc();
@@ -162,10 +131,7 @@ describe("vega_core", () => {
       [pool_pda.toBuffer(), mint.toBuffer()],
       program.programId
     );
-    [pool_lp_vault_ata] = findProgramAddressSync(
-      [pool_pda.toBuffer(), lp_mint.toBuffer()],
-      program.programId
-    );
+
 
     const tx = await program.methods
       .createPool()
@@ -173,10 +139,7 @@ describe("vega_core", () => {
         signer: owner.publicKey,
         pool: pool_pda,
         mint: mint,
-        lpMint: lp_mint,
         poolVault: pool_vault_ata,
-        poolLpVault: pool_lp_vault_ata,
-        userLpAta: owner_lp_ata,
         userAta: owner_ata,
         config: config_pda,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -188,10 +151,8 @@ describe("vega_core", () => {
     await provider.connection.confirmTransaction(tx, "confirmed");
 
     let mint_amount = (await getAccount(provider.connection, owner_ata, "confirmed", TOKEN_PROGRAM_ID)).amount;
-    let lp_amount = (await getAccount(provider.connection, owner_lp_ata, "confirmed", TOKEN_PROGRAM_ID)).amount;
 
     expect(mint_amount.toString()).to.equal((90000000 * LAMPORTS_PER_SOL).toString());
-    expect(lp_amount.toString()).to.equal('0');
 
   });
   it("buy mint", async () => {
@@ -229,12 +190,6 @@ describe("vega_core", () => {
       program.programId
     );
     try {
-      const before_lp = await getAccount(
-        provider.connection,
-        owner_lp_ata,
-        "confirmed",
-        TOKEN_PROGRAM_ID
-      );
 
       const tx = await program.methods
         .deposit(new anchor.BN(100 * LAMPORTS_PER_SOL))
@@ -242,11 +197,8 @@ describe("vega_core", () => {
           signer: owner.publicKey,
           pool: pool_pda,
           poolVault: pool_vault_ata,
-          poolLpVault: pool_lp_vault_ata,
           mint: mint,
-          lpMint: lp_mint,
           userAta: owner_ata,
-          userLpAta: owner_lp_ata,
           userPoolInfo: owner_pool_info_pda,
           config: config_pda,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -257,14 +209,6 @@ describe("vega_core", () => {
         .rpc();
       await provider.connection.confirmTransaction(tx, "confirmed");
 
-      const after_lp = await getAccount(
-        provider.connection,
-        owner_lp_ata,
-        "confirmed",
-        TOKEN_PROGRAM_ID
-      );
-
-      expect(before_lp.amount).not.to.equal(after_lp.amount);
     } catch (error) {
       console.log(error);
     }
@@ -293,14 +237,7 @@ describe("vega_core", () => {
       TOKEN_PROGRAM_ID
     );
 
-    let another_01_lp_mint_ata: PublicKey = await createAssociatedTokenAccount(
-      provider.connection,
-      another_01,
-      lp_mint,
-      another_01.publicKey,
-      { commitment: "confirmed" },
-      TOKEN_PROGRAM_ID
-    );
+
 
     await mintTo(
       provider.connection,
@@ -320,11 +257,8 @@ describe("vega_core", () => {
         signer: another_01.publicKey,
         pool: pool_pda,
         poolVault: pool_vault_ata,
-        poolLpVault: pool_lp_vault_ata,
         mint: mint,
-        lpMint: lp_mint,
         userAta: another_01_mint_ata,
-        userLpAta: another_01_lp_mint_ata,
         userPoolInfo: another_01_pool_info_pda,
         config: config_pda,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -335,14 +269,10 @@ describe("vega_core", () => {
       .rpc();
 
     await provider.connection.confirmTransaction(tx, "confirmed");
+    //compare lp;
+    const [a, b] = await program.account.userPoolInfo.all();
+    expect(a.account.lpAmount.toNumber()).to.equal(b.account.lpAmount.toNumber());
 
-    const another_01_lp_mint_account = (await program.account.userPoolInfo.fetch(another_01_pool_info_pda)).lpAmount;
-    const owner_lp_mint_account = (await program.account.userPoolInfo.fetch(owner_lp_ata)).lpAmount;
-
-
-    expect(another_01_lp_mint_account.toString()).to.equal(
-      owner_lp_mint_account.toString()
-    );
   });
 
   it("withdraw", async () => {
@@ -357,7 +287,7 @@ describe("vega_core", () => {
     );
 
 
-    const tx = await program.methods.withdraw().accounts({ signer: owner.publicKey, pool: pool_pda, poolVault: pool_vault_ata, poolLpVault: pool_lp_vault_ata, mint: mint, lpMint: lp_mint, userAta: owner_ata, userLpAta: owner_lp_ata, userPoolInfo: owner_pool_info_pda, config: config_pda, rent: anchor.web3.SYSVAR_RENT_PUBKEY, clock: anchor.web3.SYSVAR_CLOCK_PUBKEY, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
+    const tx = await program.methods.withdraw().accounts({ signer: owner.publicKey, pool: pool_pda, poolVault: pool_vault_ata, mint: mint, userAta: owner_ata, userPoolInfo: owner_pool_info_pda, config: config_pda, rent: anchor.web3.SYSVAR_RENT_PUBKEY, clock: anchor.web3.SYSVAR_CLOCK_PUBKEY, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
 
     await provider.connection.confirmTransaction(tx, "confirmed");
 
