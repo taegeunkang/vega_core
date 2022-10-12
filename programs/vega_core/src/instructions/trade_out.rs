@@ -1,8 +1,5 @@
 use crate::{states::*, utils::*};
-use anchor_lang::{
-    prelude::*,
-    solana_program::{self, entrypoint::ProgramResult},
-};
+use anchor_lang::{prelude::*, solana_program::entrypoint::ProgramResult};
 use chainlink_solana as chainlink;
 
 #[derive(Accounts)]
@@ -21,8 +18,6 @@ pub struct TradeOut<'info> {
     pub chainlink_feed: AccountInfo<'info>,
     /// CHECK: This is the Chainlink program library on Devnet
     pub chainlink_program: AccountInfo<'info>,
-    #[account(address = solana_program::sysvar::clock::ID)]
-    pub clock: Sysvar<'info, Clock>,
     pub system_program: Program<'info, System>,
 }
 
@@ -39,18 +34,23 @@ pub fn handler(ctx: Context<TradeOut>) -> ProgramResult {
         current_price,
         ctx.accounts.trade_info.way,
     );
-    let lp_amount = calc_trade_out_lp_amount(
-        ctx.accounts.user_pool_info.current_lp_amount,
-        percentage,
-        pl,
-    );
+    let lp_amount = calc_trade_out_lp_amount(ctx.accounts.trade_info.amount, percentage, pl);
     msg!("user trade out");
+    msg!("percentage : {}", percentage);
+    msg!("entry price : {} , current price : {}", ctx.accounts.trade_info.entry_price, current_price);
+    
     msg!(
         "trade in : {}, trade out : {}",
-        ctx.accounts.user_pool_info.current_lp_amount,
+        ctx.accounts.trade_info.amount,
         lp_amount
     );
-    ctx.accounts.user_pool_info.current_lp_amount = lp_amount;
+
+    ctx.accounts.user_pool_info.current_lp_amount = ctx
+        .accounts
+        .user_pool_info
+        .current_lp_amount
+        .checked_add(lp_amount)
+        .unwrap();
 
     ProgramResult::Ok(())
 }

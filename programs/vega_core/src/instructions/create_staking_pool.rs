@@ -1,8 +1,8 @@
-
-
-
-use anchor_lang::{prelude::*, solana_program::{entrypoint::ProgramResult, native_token::LAMPORTS_PER_SOL, self}};
-use anchor_spl::token::{TokenAccount, Token};
+use anchor_lang::{
+    prelude::*,
+    solana_program::{self, entrypoint::ProgramResult, native_token::LAMPORTS_PER_SOL},
+};
+use anchor_spl::token::{Token, TokenAccount};
 
 use crate::{states::*, utils::*};
 
@@ -30,10 +30,21 @@ pub struct CreateStakingPool<'info> {
 
 pub fn handler(ctx: Context<CreateStakingPool>) -> ProgramResult {
     let pool = &mut ctx.accounts.pool;
-    pool.init(ctx.program_id.clone(), ctx.accounts.config.fee_rate, ctx.accounts.mint.key(), ctx.accounts.pool_vault.key(), ctx.accounts.config.key());
+    pool.init(
+        ctx.program_id.clone(),
+        ctx.accounts.config.fee_rate,
+        ctx.accounts.mint.key(),
+        ctx.accounts.pool_vault.key(),
+        ctx.accounts.config.key(),
+    );
 
     let mint_amount: u64 = 10000000 * LAMPORTS_PER_SOL;
-    transfer_mint_from_signer_to_vault(&ctx.accounts.token_program, &ctx.accounts.signer, &ctx.accounts.user_ata, &ctx.accounts.pool_vault, mint_amount)?;
+    transfer_mint_from_signer_to_vault(
+        &ctx.accounts.token_program,
+        &ctx.accounts.signer,
+        &ctx.accounts.user_ata,
+        &ctx.accounts.pool_vault,
+        mint_amount,
+    )?;
     ProgramResult::Ok(())
-
 }

@@ -1,10 +1,8 @@
-
 use anchor_lang::{prelude::*, solana_program::entrypoint::ProgramResult};
-use anchor_spl::token::{TokenAccount, Mint, Token};
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
-
-use crate::utils::*;
 use crate::states::Pool;
+use crate::utils::*;
 #[derive(Accounts)]
 #[instruction(amount : u64)]
 pub struct Sell<'info> {
@@ -23,13 +21,17 @@ pub struct Sell<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx : Context<Sell>, amount : u64) -> ProgramResult {
+pub fn handler(ctx: Context<Sell>, amount: u64) -> ProgramResult {
+    // receive vega from signer
+    transfer_mint_from_signer_to_vault(
+        &ctx.accounts.token_program,
+        &ctx.accounts.signer,
+        &ctx.accounts.user_ata,
+        &ctx.accounts.pool_vault,
+        amount,
+    )?;
+    let sol_amount = amount.checked_div(10).unwrap();
+    transfer_sol_from_vault_to_signer(&ctx.accounts.pool, &ctx.accounts.signer, sol_amount)?;
 
-     // receive vega from signer
-     transfer_mint_from_signer_to_vault(&ctx.accounts.token_program, &ctx.accounts.signer, &ctx.accounts.user_ata, &ctx.accounts.pool_vault, amount)?;
-     let sol_amount = amount.checked_div(10).unwrap();
-     transfer_sol_from_vault_to_signer(&ctx.accounts.pool, &ctx.accounts.signer, sol_amount)?;
-    
-     ProgramResult::Ok(())
-
+    ProgramResult::Ok(())
 }

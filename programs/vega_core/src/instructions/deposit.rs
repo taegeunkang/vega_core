@@ -1,10 +1,10 @@
-
-use anchor_lang::{prelude::*, solana_program::{entrypoint::ProgramResult, self}};
-use anchor_spl::token::{TokenAccount, Token};
+use anchor_lang::{
+    prelude::*,
+    solana_program::{self, entrypoint::ProgramResult},
+};
+use anchor_spl::token::{Token, TokenAccount};
 
 use crate::{states::*, utils::*};
-
-
 
 #[derive(Accounts)]
 #[instruction(amount : u64)]
@@ -32,21 +32,37 @@ pub struct Deposit<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx : Context<Deposit>, amount : u64)  -> ProgramResult {
-
-    transfer_mint_from_signer_to_vault(&ctx.accounts.token_program, &ctx.accounts.signer, &ctx.accounts.user_ata, &ctx.accounts.pool_vault , amount)?;
+pub fn handler(ctx: Context<Deposit>, amount: u64) -> ProgramResult {
+    transfer_mint_from_signer_to_vault(
+        &ctx.accounts.token_program,
+        &ctx.accounts.signer,
+        &ctx.accounts.user_ata,
+        &ctx.accounts.pool_vault,
+        amount,
+    )?;
 
     let amount_fee: u64 = calc_fee_amount(amount, ctx.accounts.pool.fee_rate);
     let amt: u64 = amount.checked_sub(amount_fee).unwrap();
     let vault_amount: u64 = ctx.accounts.pool.vault_amount.checked_add(amt).unwrap();
-    let lp_amount: u64 = calc_lp_amount(vault_amount, ctx.accounts.pool.lp_supply, amt);
+    let lp_amount: u64 = calc_lp_amount(
+        ctx.accounts.pool.vault_amount,
+        ctx.accounts.pool.lp_supply,
+        amt,
+    );
 
     if lp_amount == 0 {
         return ProgramResult::Err(ProgramError::InsufficientFunds);
     }
-    let user_pool_info  = &mut ctx.accounts.user_pool_info;
-    user_pool_info.init(ctx.accounts.signer.key(), ctx.accounts.pool.key(), ctx.accounts.mint.key(), amt, ctx.accounts.clock.unix_timestamp as u64, lp_amount);
+    let user_pool_info = &mut ctx.accounts.user_pool_info;
+    user_pool_info.init(
+        ctx.accounts.signer.key(),
+        ctx.accounts.pool.key(),
+        ctx.accounts.mint.key(),
+        amt,
+        ctx.accounts.clock.unix_timestamp as u64,
+        lp_amount,
+    );
+    ctx.accounts.pool.lp_supply = ctx.accounts.pool.lp_supply.checked_add(lp_amount).unwrap();
     ctx.accounts.pool.vault_amount = vault_amount;
     ProgramResult::Ok(())
-
 }

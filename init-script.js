@@ -24,6 +24,7 @@ async function main() {
 
     const program = new anchor.Program(idl, programId);
 
+
     console.log(program.programId);
 
 }
@@ -32,5 +33,8 @@ main().then(() => "done");
 
 // anchor deploy --provider.cluster devnet
 // anchor idl init --provider.cluster devnet  -f target/idl/vega_core.json `solana address -k target/deploy/vega_core-keypair.json`
+// anchor idl upgrade --provider.cluster devnet  -f target/idl/vega_core.json `solana address -k target/deploy/vega_core-keypair.json`
 // Please note that everytime you redeploy your solana program,
 // you need to tell solana how your program api looks like, we can do so with anchor idl upgrade instead of anchor idl init
+// solana-keygen recover 'prompt:?key=0/0'
+// solana-keygen new --outfile ./target/deploy/vega_core-keypair.json --force (new program id)

@@ -18,7 +18,7 @@ pub struct Withdraw<'info> {
     /// CHECK : this is safe
     #[account(mut)]
     pub mint: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = user_ata.owner == signer.key())]
     pub user_ata: Account<'info, TokenAccount>,
     #[account(mut, seeds=[b"user_pool_info", signer.key().as_ref(), pool.key().as_ref()], bump, close = signer)]
     pub user_pool_info: Box<Account<'info, UserPoolInfo>>,
@@ -40,6 +40,18 @@ pub fn handler(ctx: Context<Withdraw>) -> ProgramResult {
         ctx.accounts.user_pool_info.lp_amount,
         ctx.accounts.user_pool_info.current_lp_amount,
     );
+    msg!(
+        "withdraw start : {}, end : {} deposit amount : {}",
+        ctx.accounts.user_pool_info.deposited_time,
+        ctx.accounts.clock.unix_timestamp as u64,
+        ctx.accounts.user_pool_info.deposited_amount
+    );
+    msg!(
+        "before lp : {}, after lp : {}, reward : {}",
+        ctx.accounts.user_pool_info.lp_amount,
+        ctx.accounts.user_pool_info.current_lp_amount,
+        reward
+    );
 
     let seeds = &[
         b"pool".as_ref(),
@@ -56,5 +68,12 @@ pub fn handler(ctx: Context<Withdraw>) -> ProgramResult {
         &ctx.accounts.pool,
         reward,
     )?;
+
+    ctx.accounts.pool.lp_supply = ctx
+        .accounts
+        .pool
+        .lp_supply
+        .checked_sub(ctx.accounts.user_pool_info.lp_amount)
+        .unwrap();
     ProgramResult::Ok(())
 }

@@ -12,7 +12,15 @@ pub struct UserPoolInfo {
 }
 
 impl UserPoolInfo {
-    pub fn init(&mut self, signer : Pubkey , pool : Pubkey, mint : Pubkey, amount : u64, clock : u64,lp_amount : u64) {
+    pub fn init(
+        &mut self,
+        signer: Pubkey,
+        pool: Pubkey,
+        mint: Pubkey,
+        amount: u64,
+        clock: u64,
+        lp_amount: u64,
+    ) {
         self.authority = signer;
         self.pool = pool;
         self.mint = mint;

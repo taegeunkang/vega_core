@@ -132,7 +132,6 @@ describe("vega_core", () => {
       program.programId
     );
 
-
     const tx = await program.methods
       .createPool()
       .accounts({

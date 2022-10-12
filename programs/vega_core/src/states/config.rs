@@ -7,11 +7,9 @@ pub struct Config {
 }
 
 impl Config {
-
-    pub fn init(&mut self, authority : Pubkey , fee_rate : u8 ) -> ProgramResult {
+    pub fn init(&mut self, authority: Pubkey, fee_rate: u8) -> ProgramResult {
         self.authority = authority;
         self.fee_rate = fee_rate;
         ProgramResult::Ok(())
     }
-
 }

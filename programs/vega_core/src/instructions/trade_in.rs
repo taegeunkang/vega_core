@@ -1,10 +1,9 @@
+use crate::states::*;
 use anchor_lang::{
     prelude::*,
-    solana_program::{self, entrypoint::ProgramResult},
+    solana_program::{entrypoint::ProgramResult},
 };
 use chainlink_solana as chainlink;
-use crate::states::*;
-
 
 #[derive(Accounts)]
 #[instruction(way : u8, amount : u64)]
@@ -22,27 +21,22 @@ pub struct TradeIn<'info> {
     pub chainlink_feed: AccountInfo<'info>,
     /// CHECK: This is the Chainlink program library on Devnet
     pub chainlink_program: AccountInfo<'info>,
-    #[account(address = solana_program::sysvar::clock::ID)]
-    pub clock: Sysvar<'info, Clock>,
+
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<TradeIn>, way : u8 , amount : u64 ) -> ProgramResult {
+pub fn handler(ctx: Context<TradeIn>, way: u8, amount: u64) -> ProgramResult {
     let round = chainlink::latest_round_data(
-        ctx.accounts.chainlink_program.to_account_info(),
-        ctx.accounts.chainlink_feed.to_account_info(),
+        ctx.accounts.chainlink_program.clone(),
+        ctx.accounts.chainlink_feed.clone(),
     )?;
 
     let decimals = chainlink::decimals(
-        ctx.accounts.chainlink_program.to_account_info(),
-        ctx.accounts.chainlink_feed.to_account_info(),
+        ctx.accounts.chainlink_program.clone(),
+        ctx.accounts.chainlink_feed.clone(),
     )?;
     let current_price = round.answer as u64;
-    msg!(
-        "current price : {}, decimals : {}",
-        current_price,
-        decimals
-    );
+    msg!("current price : {}, decimals : {}", current_price, decimals);
     msg!(
         "trade_in way : {}, current_price : {}, decimals : {}, amount : {}",
         way,
@@ -52,7 +46,19 @@ pub fn handler(ctx: Context<TradeIn>, way : u8 , amount : u64 ) -> ProgramResult
     );
 
     let trade_info = &mut ctx.accounts.trade_info;
-    trade_info.init(ctx.accounts.signer.key(), way, amount, current_price, decimals);
+    trade_info.init(
+        ctx.accounts.signer.key(),
+        way,
+        amount,
+        current_price,
+        decimals,
+    );
+    ctx.accounts.user_pool_info.current_lp_amount = ctx
+        .accounts
+        .user_pool_info
+        .current_lp_amount
+        .checked_sub(amount)
+        .unwrap();
 
     ProgramResult::Ok(())
 }
